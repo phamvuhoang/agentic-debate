@@ -1,17 +1,14 @@
 // demo/frontend/main.js
-import * as a2ui from '@a2ui/lit';
+import { v0_8 as a2ui } from '@a2ui/lit';
 
 // Register A2UI custom elements (auto-registers a2ui-surface, a2ui-card, etc.)
 // The import above registers elements as a side-effect.
 
 const SURFACE_ID = 'debate-surface';
 
-// Create the reactive message processor — fallback chain handles API variations across versions
-const processor = a2ui.Data
-  ? a2ui.Data.createSignalA2uiMessageProcessor()
-  : a2ui.createSignalA2uiMessageProcessor
-    ? a2ui.createSignalA2uiMessageProcessor()
-    : new a2ui.A2uiMessageProcessor();
+// Create the reactive message processor using the versioned namespace API
+// v0_8.Data.createSignalA2uiMessageProcessor() returns a signal-backed processor
+const processor = a2ui.Data.createSignalA2uiMessageProcessor();
 
 // Wire processor to <a2ui-surface>
 const surfaceEl = document.getElementById(SURFACE_ID);
@@ -72,10 +69,8 @@ async function startDebate(topic) {
         if (!raw || raw === '[DONE]') continue;
         try {
           const msg = JSON.parse(raw);
-          // Feed into A2UI processor — try known method names in order
-          if (processor.processMessage) processor.processMessage(msg);
-          else if (processor.process) processor.process(msg);
-          else processor.onMessage?.(msg);
+          // Feed into A2UI processor — processMessages takes an array
+          processor.processMessages([msg]);
         } catch (e) {
           console.warn('failed to parse SSE message', raw, e);
         }
