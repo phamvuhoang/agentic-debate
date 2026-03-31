@@ -1,0 +1,17 @@
+{
+  "name": "agentic-debate-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@a2ui/lit": "latest",
+    "lit": "^3.0.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}
