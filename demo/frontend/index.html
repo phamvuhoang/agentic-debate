@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agentic Debate</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="header">
+      <div id="header-inner">
+        <span id="logo">⚔️ Agentic Debate</span>
+        <div id="input-row">
+          <input
+            id="topic-input"
+            type="text"
+            placeholder="Ask anything — the debate team will be auto-assembled…"
+            autocomplete="off"
+          />
+          <button id="submit-btn">Debate</button>
+        </div>
+      </div>
+    </header>
+    <main id="surface-container">
+      <a2ui-surface id="debate-surface"></a2ui-surface>
+    </main>
+  </div>
+  <script type="module" src="/main.js"></script>
+</body>
+</html>
