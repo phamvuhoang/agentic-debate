@@ -1,6 +1,6 @@
 from __future__ import annotations
 import json
-from typing import Awaitable, Callable
+from typing import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock
 import pytest
 from agentic_debate.context import DebateContext
@@ -90,3 +90,15 @@ async def test_collect_fires_on_challenge_callback():
     ctx = DebateContext(namespace="test")
     await source.collect(spec, ctx)
     assert len(fired) == 4  # 2 × 2
+
+
+@pytest.mark.asyncio
+async def test_collect_populates_challenge_fields():
+    from backend.challenge_source import LlmChallengeSource
+    spec = _make_spec(n_participants=2, max_rounds=1)
+    source = LlmChallengeSource(llm=_make_caller("My argument."))
+    ctx = DebateContext(namespace="test")
+    challenges = await source.collect(spec, ctx)
+    assert challenges[0].challenge_text == "My argument."
+    assert challenges[0].topic == "test_topic"
+    assert challenges[0].confidence == 0.75

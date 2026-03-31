@@ -31,8 +31,12 @@ class LlmChallengeSource:
         participants = spec.participants
         n = len(participants)
         max_rounds = spec.round_policy.max_rounds
+
+        if n < 2:
+            raise ValueError(f"LlmChallengeSource requires at least 2 participants, got {n}")
+
         challenges: list[DebateChallenge] = []
-        # prior_args[participant_id] = last argument text they received
+        # prior_args[participant_id] = argument this participant received (used in their next turn to rebut)
         prior_args: dict[str, str] = {}
 
         for round_idx in range(1, max_rounds + 1):
@@ -40,7 +44,7 @@ class LlmChallengeSource:
                 target = participants[(i + 1) % n]
                 prior = prior_args.get(challenger.participant_id, "")
 
-                if round_idx == 1 or not prior:
+                if round_idx == 1:
                     prompt = FIRST_ROUND_CHALLENGE_PROMPT.format(
                         challenger_label=challenger.label,
                         challenger_stance=challenger.stance or "neutral",
