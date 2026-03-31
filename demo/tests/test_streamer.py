@@ -25,7 +25,7 @@ def test_begin_rendering_format():
 
 def test_status_card_is_valid_surface_update():
     from backend.streamer import status_card_msg
-    msg = json.loads(status_card_msg("Analyzing...", ["debate_root"]))
+    msg = json.loads(status_card_msg("Analyzing...", []))
     assert "surfaceUpdate" in msg
     components = {c["id"]: c for c in msg["surfaceUpdate"]["components"]}
     assert "debate_root" in components

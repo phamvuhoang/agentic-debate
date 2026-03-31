@@ -33,7 +33,7 @@ def _card(uid: str, child_id: str) -> dict[str, Any]:
     return {"id": uid, "component": {"Card": {"child": child_id}}}
 
 
-def _button(uid: str, label: str, action_name: str, child_id: str) -> dict[str, Any]:
+def _button(uid: str, action_name: str, child_id: str) -> dict[str, Any]:
     return {
         "id": uid,
         "component": {
@@ -136,7 +136,7 @@ def argument_card_msg(
     participants: list[DebateParticipant],
     existing_children: list[str],
 ) -> str:
-    uid = f"arg_r{challenge.round_index}_{challenge.challenger_id}"
+    uid = f"arg_r{challenge.round_index}_{challenge.challenger_id}_vs_{challenge.target_id}"
     children = existing_children + [uid]
     pid_map = {p.participant_id: p for p in participants}
     challenger = pid_map.get(challenge.challenger_id)
@@ -199,7 +199,7 @@ def verdict_card_msg(
     btn_uid = "restart_btn"
     btn_label_uid = "restart_btn_label"
     verdict_child_ids.append(btn_uid)
-    components.append(_button(btn_uid, "Ask another question", "restart_debate", btn_label_uid))
+    components.append(_button(btn_uid, "restart_debate", btn_label_uid))
     components.append(_text(btn_label_uid, "Ask another question", "body"))
 
     return _surface_update([
