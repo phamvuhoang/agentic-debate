@@ -8,11 +8,11 @@ from google.genai import types
 from pydantic import BaseModel
 
 from agentic_debate.context import DebateContext
+from agentic_debate.llm.base import LlmCaller  # noqa: F401 — re-exported for type checkers
 
 T = TypeVar("T", bound=BaseModel)
 
 MODEL = "gemini-3-flash-preview"
-ACCENT_COLORS = ["#4F86C6", "#E05A5A", "#4CAF50", "#F5A623", "#9B59B6"]
 
 
 class GeminiLlmCaller:
@@ -41,4 +41,9 @@ class GeminiLlmCaller:
                 response_mime_type="application/json",
             ),
         )
+        if response.text is None:
+            raise ValueError(
+                f"Gemini returned no text. "
+                f"finish_reason={getattr(getattr(response, 'candidates', [{}])[0], 'finish_reason', 'unknown')!r}"
+            )
         return response_model.model_validate_json(response.text)

@@ -36,9 +36,9 @@ async def test_gemini_llm_caller_returns_parsed_model(mock_genai_client):
 @pytest.mark.asyncio
 async def test_gemini_llm_caller_passes_model_name(mock_genai_client):
     from backend.gemini import GeminiLlmCaller
-    caller = GeminiLlmCaller(client=mock_genai_client, model="gemini-3-flash-preview")
+    caller = GeminiLlmCaller(client=mock_genai_client, model="test-model-sentinel")
     ctx = DebateContext(namespace="test")
     await caller.generate_structured("my prompt", _SampleModel, context=ctx)
     call_kwargs = mock_genai_client.aio.models.generate_content.call_args
-    assert call_kwargs.kwargs["model"] == "gemini-3-flash-preview"
+    assert call_kwargs.kwargs["model"] == "test-model-sentinel"
     assert call_kwargs.kwargs["contents"] == "my prompt"
