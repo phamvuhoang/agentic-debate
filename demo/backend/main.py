@@ -58,7 +58,6 @@ async def debate(request: DebateRequest) -> EventSourceResponse:
 
         def enqueue(msg: str) -> None:
             queue.put_nowait(msg)
-            nonlocal children
             parsed = json.loads(msg)
             if "surfaceUpdate" in parsed:
                 root_comp = next(
@@ -66,9 +65,11 @@ async def debate(request: DebateRequest) -> EventSourceResponse:
                     None,
                 )
                 if root_comp and "Column" in root_comp["component"]:
-                    children = list(
+                    new_children = list(
                         root_comp["component"]["Column"]["children"]["explicitList"]
                     )
+                    children.clear()
+                    children.extend(new_children)
 
         try:
             # Init surface
@@ -122,13 +123,11 @@ async def debate(request: DebateRequest) -> EventSourceResponse:
             )
             compiled = await compiler.compile(spec, context=ctx)
 
-            # Sync observer children before engine run (children may have been rebound)
-            observer._children = list(children)
+            # Sync observer children before engine run (shared mutable reference)
+            observer._children = children
 
             run_result = await DebateEngine().run(compiled, context=ctx)
 
-            # Re-sync children from observer (in case it updated them during arbitration)
-            children = list(observer._children)
             enqueue(verdict_card_msg(run_result.arbitration, participants, children))
 
         except Exception as exc:
@@ -137,14 +136,17 @@ async def debate(request: DebateRequest) -> EventSourceResponse:
         finally:
             queue.put_nowait(None)  # sentinel
 
-    asyncio.create_task(run())
+    task = asyncio.create_task(run())
 
     async def stream():
-        while True:
-            msg = await queue.get()
-            if msg is None:
-                break
-            yield {"data": msg}
+        try:
+            while True:
+                msg = await queue.get()
+                if msg is None:
+                    break
+                yield {"data": msg}
+        finally:
+            task.cancel()
 
     return EventSourceResponse(stream())
 
