@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field
 from agentic_debate.context import DebateContext
 from agentic_debate.llm.base import LlmCaller  # noqa: F401 — re-exported for type checkers
 from agentic_debate.types import DebateParticipant
+from backend.constants import ACCENT_COLORS as ACCENT_COLORS  # re-export
+from backend.prompts import INTENT_PROMPT, TEAM_PROMPT
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -53,7 +55,7 @@ class GeminiLlmCaller:
 class _RawIntentResult(BaseModel):
     reframed_topic: str
     domain: str
-    controversy_level: Literal["low", "medium", "high"]
+    controversy_level: str
     recommended_participants: int
     recommended_rounds: int
 
@@ -82,13 +84,15 @@ async def intent_analysis(
     llm: GeminiLlmCaller,
     context: DebateContext,
 ) -> IntentResult:
-    from backend.prompts import INTENT_PROMPT
     prompt = INTENT_PROMPT.format(topic=topic)
     raw = await llm.generate_structured(prompt, _RawIntentResult, context=context)
+    # Normalize controversy_level to valid values
+    valid_levels = {"low", "medium", "high"}
+    controversy = raw.controversy_level.lower() if raw.controversy_level.lower() in valid_levels else "medium"
     return IntentResult(
         reframed_topic=raw.reframed_topic,
         domain=raw.domain,
-        controversy_level=raw.controversy_level,
+        controversy_level=controversy,  # type: ignore[arg-type]
         recommended_participants=max(2, min(5, raw.recommended_participants)),
         recommended_rounds=max(1, min(3, raw.recommended_rounds)),
     )
@@ -99,8 +103,6 @@ async def generate_team(
     llm: GeminiLlmCaller,
     context: DebateContext,
 ) -> list[DebateParticipant]:
-    from backend.prompts import TEAM_PROMPT
-    from backend.constants import ACCENT_COLORS
     prompt = TEAM_PROMPT.format(
         topic=intent.reframed_topic,
         domain=intent.domain,

@@ -53,6 +53,19 @@ async def test_intent_analysis_clamps_participants():
     assert 2 <= result.recommended_participants <= 5
     assert 1 <= result.recommended_rounds <= 3
 
+    # Also test lower bound for participants
+    payload_low = {
+        "reframed_topic": "test",
+        "domain": "test",
+        "controversy_level": "low",
+        "recommended_participants": 1,  # too low
+        "recommended_rounds": 5,         # too high
+    }
+    caller_low = _make_caller(json.dumps(payload_low))
+    result_low = await intent_analysis("test", caller_low, ctx)
+    assert result_low.recommended_participants == 2
+    assert result_low.recommended_rounds == 3
+
 
 @pytest.mark.asyncio
 async def test_generate_team_returns_correct_count():
