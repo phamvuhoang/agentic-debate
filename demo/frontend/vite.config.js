@@ -2,6 +2,14 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
+  server: {
+    proxy: {
+      '/debate': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+  },
   build: {
     outDir: 'dist',
     rollupOptions: {
@@ -9,3 +17,4 @@ export default defineConfig({
     },
   },
 })
+

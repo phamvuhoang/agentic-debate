@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@a2ui/lit": "latest",
+    "@a2ui/markdown-it": "^0.0.1",
     "lit": "^3.0.0"
   },
   "devDependencies": {

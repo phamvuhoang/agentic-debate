@@ -43,7 +43,7 @@ async def test_debate_endpoint_returns_sse_stream():
     mock_client.aio.models = MagicMock()
     mock_client.aio.models.generate_content = fake_generate
 
-    with patch("backend.main.genai") as mock_genai:
+    with patch("backend.gemini.genai") as mock_genai:
         mock_genai.Client.return_value = mock_client
         from backend.main import app
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:

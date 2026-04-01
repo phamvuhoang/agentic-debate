@@ -1,16 +1,94 @@
 // demo/frontend/main.js
 import { v0_8 as a2ui } from '@a2ui/lit';
-
-// Register A2UI custom elements (auto-registers a2ui-surface, a2ui-card, etc.)
-// The import above registers elements as a side-effect.
+import { ContextProvider } from '@lit/context';
+import { renderMarkdown } from '@a2ui/markdown-it';
 
 const SURFACE_ID = 'debate-surface';
 
-// Create the reactive message processor using the versioned namespace API
-// v0_8.Data.createSignalA2uiMessageProcessor() returns a signal-backed processor
+// ---------------------------------------------------------------------------
+// Theme — drives visual styling of all a2ui-* components via additionalStyles.
+// The CSS class maps (components.*) are left empty; all visual styling is done
+// via inline styles in additionalStyles so we don't rely on external CSS vars.
+// ---------------------------------------------------------------------------
+const DEBATE_THEME = {
+  components: {
+    AudioPlayer: {}, Button: {}, Card: {}, Column: {},
+    CheckBox: { container: {}, element: {}, label: {} },
+    DateTimeInput: { container: {}, element: {}, label: {} },
+    Divider: {},
+    Image: { all: {}, icon: {}, avatar: {}, smallFeature: {}, mediumFeature: {}, largeFeature: {}, header: {} },
+    Icon: {}, List: {},
+    Modal: { backdrop: {}, element: {} },
+    MultipleChoice: { container: {}, element: {}, label: {} },
+    Row: {},
+    Slider: { container: {}, element: {}, label: {} },
+    Tabs: { container: {}, element: {}, controls: { all: {}, selected: {} } },
+    Text: { all: {}, h1: {}, h2: {}, h3: {}, h4: {}, h5: {}, caption: {}, body: {} },
+    TextField: { container: {}, element: {}, label: {} },
+    Video: {},
+  },
+  elements: {
+    a: {}, audio: {}, body: {}, button: {}, h1: {}, h2: {}, h3: {}, h4: {}, h5: {},
+    iframe: {}, input: {}, p: {}, pre: {}, textarea: {}, video: {},
+  },
+  additionalStyles: {
+    Card: {
+      background: 'rgba(255,255,255,0.06)',
+      'border-radius': '10px',
+      padding: '16px 20px',
+      'border-left': '3px solid rgba(255,255,255,0.15)',
+      'box-shadow': '0 2px 8px rgba(0,0,0,0.3)',
+      'margin-bottom': '4px',
+    },
+    Column: {
+      gap: '10px',
+    },
+    Row: {
+      gap: '8px',
+    },
+    Button: {
+      background: 'rgba(255,255,255,0.1)',
+      color: '#fff',
+      'border-radius': '6px',
+      padding: '10px 20px',
+      cursor: 'pointer',
+      border: '1px solid rgba(255,255,255,0.2)',
+      'font-size': '14px',
+      'font-weight': '500',
+    },
+    // Text uses per-hint styles (object with h1/h2/h3/body keys)
+    Text: {
+      h1: { 'font-size': '22px', 'font-weight': '700', color: '#ffffff', 'line-height': '1.3', margin: '0' },
+      h2: { 'font-size': '18px', 'font-weight': '600', color: '#e8e8e8', 'line-height': '1.4', margin: '0' },
+      h3: { 'font-size': '15px', 'font-weight': '600', color: '#d0d0d0', 'line-height': '1.4', margin: '0' },
+      h4: { 'font-size': '13px', 'font-weight': '500', color: '#b8b8b8', 'line-height': '1.4', margin: '0' },
+      h5: { 'font-size': '12px', 'font-weight': '500', color: '#b0b0b0', 'line-height': '1.4', margin: '0' },
+      caption: { 'font-size': '11px', color: '#888', 'line-height': '1.4', margin: '0' },
+      body: { 'font-size': '14px', color: '#c8c8c8', 'line-height': '1.6', margin: '0' },
+    },
+    markdown: {},
+  },
+};
+
+// Provide theme context to all a2ui-* components in the tree
+const themeProvider = new ContextProvider(document.getElementById('app'), {
+  context: a2ui.UI.Context.theme,
+  initialValue: DEBATE_THEME,
+});
+themeProvider.hostConnected();
+
+// Provide markdown renderer so text with usageHint h1/h2/h3 renders as HTML
+const markdownProvider = new ContextProvider(document.getElementById('app'), {
+  context: a2ui.UI.Context.markdown,
+  initialValue: renderMarkdown,
+});
+markdownProvider.hostConnected();
+
+// ---------------------------------------------------------------------------
+// Processor and surface wiring
+// ---------------------------------------------------------------------------
 const processor = a2ui.Data.createSignalA2uiMessageProcessor();
 
-// Wire processor to <a2ui-surface>
 const surfaceEl = document.getElementById(SURFACE_ID);
 surfaceEl.processor = processor;
 surfaceEl.surfaceId = SURFACE_ID;
@@ -24,8 +102,8 @@ function setRunning(running) {
 }
 
 function resetSurface() {
-  if (processor.clearSurfaces) processor.clearSurfaces();
-  else if (processor.reset) processor.reset();
+  processor.clearSurfaces();
+  surfaceEl.surface = null;
 }
 
 async function startDebate(topic) {
@@ -69,8 +147,8 @@ async function startDebate(topic) {
         if (!raw || raw === '[DONE]') continue;
         try {
           const msg = JSON.parse(raw);
-          // Feed into A2UI processor — processMessages takes an array
           processor.processMessages([msg]);
+          surfaceEl.surface = processor.getSurfaces().get(SURFACE_ID) ?? null;
         } catch (e) {
           console.warn('failed to parse SSE message', raw, e);
         }

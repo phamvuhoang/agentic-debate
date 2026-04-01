@@ -108,7 +108,7 @@ def participant_intro_card_msg(
     existing_children: list[str],
 ) -> str:
     uid = f"p_intro_{participant.participant_id}"
-    children = existing_children + [uid]
+    children = [c for c in existing_children if c != "status_card"] + [uid]
     color = participant.metadata.get("accent_color", "#888")
     label = f"{color_emoji(color)} {participant.label}"
     stance_text = participant.stance or "—"
@@ -249,8 +249,8 @@ class A2UIStreamObserver:
         if event_type == "arbitration_started":
             msg = arbitrating_msg(self._children)
             # Update _children to reflect the new arbitrating_card
-            self._children = list(
-                json.loads(msg)["surfaceUpdate"]["components"][0]["component"]["Column"]["children"]["explicitList"]
-            )
+            new_children = json.loads(msg)["surfaceUpdate"]["components"][0]["component"]["Column"]["children"]["explicitList"]
+            self._children.clear()
+            self._children.extend(new_children)
             self._enqueue(msg)
         # Other events are handled by main.py directly (round headers, argument cards, etc.)

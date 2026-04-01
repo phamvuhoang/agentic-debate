@@ -10,8 +10,6 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from google import genai
-
 from agentic_debate.compile import DebateCompiler
 from agentic_debate.context import DebateContext
 from agentic_debate.engine import DebateEngine
