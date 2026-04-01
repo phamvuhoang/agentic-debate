@@ -46,6 +46,21 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 }
 #topic-input:focus { border-color: var(--accent); }
 
+#language-select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.9rem;
+  padding: 0 10px;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  text-align: center;
+}
+#language-select:focus { border-color: var(--accent); }
+
 #submit-btn {
   background: var(--accent);
   border: none;

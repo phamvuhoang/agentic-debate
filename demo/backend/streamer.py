@@ -89,6 +89,7 @@ def topic_card_msg(
     domain: str,
     controversy_level: str,
     existing_children: list[str],
+    locale: str = "en",
 ) -> str:
     """Remove status_card and topic_card if present, append topic_card."""
     children = [c for c in existing_children if c not in ("status_card", "topic_card")] + ["topic_card"]
@@ -122,12 +123,17 @@ def participant_intro_card_msg(
     ])
 
 
-def round_header_msg(round_index: int, existing_children: list[str]) -> str:
+def round_header_msg(round_index: int, existing_children: list[str], locale: str = "en") -> str:
     uid = f"round_{round_index}_hdr"
     children = existing_children + [uid]
+    label = f"Round {round_index}"
+    # Minimal static translation for demo
+    if locale == "vi": label = f"Vòng {round_index}"
+    elif locale == "ja": label = f"第 {round_index} ラウンド"
+    
     return _surface_update([
         _column(ROOT_ID, children),
-        _text(uid, f"── Round {round_index} ──", "h2"),
+        _text(uid, f"── {label} ──", "h2"),
     ])
 
 
@@ -135,6 +141,7 @@ def argument_card_msg(
     challenge: DebateChallenge,
     participants: list[DebateParticipant],
     existing_children: list[str],
+    locale: str = "en",
 ) -> str:
     uid = f"arg_r{challenge.round_index}_{challenge.challenger_id}_vs_{challenge.target_id}"
     children = existing_children + [uid]
@@ -145,7 +152,17 @@ def argument_card_msg(
     name = challenger.label if challenger else challenge.challenger_id
     target_name = target.label if target else challenge.target_id
     conf_pct = int(challenge.confidence * 100)
-    footer = f"→ challenges {target_name}  ·  {conf_pct}% confidence"
+    
+    challenges_label = "challenges"
+    confidence_label = "confidence"
+    if locale == "vi":
+        challenges_label = "phản biện"
+        confidence_label = "độ tin cậy"
+    elif locale == "ja":
+        challenges_label = "への反論"
+        confidence_label = "信頼度"
+
+    footer = f"→ {challenges_label} {target_name}  ·  {conf_pct}% {confidence_label}"
     return _surface_update([
         _column(ROOT_ID, children),
         _card(uid, f"{uid}_col"),
@@ -156,12 +173,15 @@ def argument_card_msg(
     ])
 
 
-def arbitrating_msg(existing_children: list[str]) -> str:
+def arbitrating_msg(existing_children: list[str], locale: str = "en") -> str:
     children = existing_children + ["arbitrating_card"]
+    label = "⚖️ Judge is deliberating…"
+    if locale == "vi": label = "⚖️ Thẩm phán đang cân nhắc…"
+    elif locale == "ja": label = "⚖️ 審判が検討中です…"
     return _surface_update([
         _column(ROOT_ID, children),
         _card("arbitrating_card", "arbitrating_text"),
-        _text("arbitrating_text", "⚖️ Judge is deliberating…", "h3"),
+        _text("arbitrating_text", label, "h3"),
     ])
 
 
@@ -169,38 +189,59 @@ def verdict_card_msg(
     arbitration: DebateArbitration,
     participants: list[DebateParticipant],
     existing_children: list[str],
+    transcript: dict[str, Any] | None = None,
+    locale: str = "en",
 ) -> str:
     pid_map = {p.participant_id: p for p in participants}
     # Remove arbitrating_card from children if present, append verdict_card
     children = [c for c in existing_children if c != "arbitrating_card"] + ["verdict_card"]
 
+    # Use localized strings from transcript if provided, otherwise fall back to arbitration object
+    summary = transcript.get("summary") if transcript else arbitration.summary
+    verdicts_data = transcript.get("verdicts") if transcript else [v.model_dump() for v in arbitration.verdicts]
+    contested = transcript.get("contested_topics") if transcript else list(arbitration.contested_topics)
+
     verdict_child_ids: list[str] = ["verdict_summary"]
     components: list[dict[str, Any]] = [
-        _text("verdict_summary", f"📋 {arbitration.summary}", "h3"),
+        _text("verdict_summary", f"📋 {summary}", "h3"),
     ]
-    for i, v in enumerate(arbitration.verdicts):
+    for i, v in enumerate(verdicts_data):
         vid = f"verdict_item_{i}"
-        winner = pid_map.get(v.winning_participant_id)
-        winner_name = winner.label if winner else v.winning_participant_id
-        conf_pct = int(v.confidence * 100)
-        verdict_text = f"🏆 {winner_name} ({conf_pct}%) — {v.rationale}"
+        winner_id = v.get("winning_participant_id") if isinstance(v, dict) else v.winning_participant_id
+        winner = pid_map.get(winner_id)
+        winner_name = winner.label if winner else winner_id
+        
+        conf = v.get("confidence") if isinstance(v, dict) else v.confidence
+        conf_pct = int(conf * 100)
+        
+        rationale = v.get("rationale") if isinstance(v, dict) else v.rationale
+        verdict_text = f"🏆 {winner_name} ({conf_pct}%) — {rationale}"
+        
         verdict_child_ids.append(vid)
         components.append(_text(vid, verdict_text, "body"))
-        for j, q in enumerate(v.open_questions):
+        
+        open_questions = v.get("open_questions") if isinstance(v, dict) else v.open_questions
+        for j, q in enumerate(open_questions):
             qid = f"verdict_item_{i}_q{j}"
             verdict_child_ids.append(qid)
             components.append(_text(qid, f"❓ {q}", "body"))
 
-    if arbitration.contested_topics:
+    if contested:
         cid = "verdict_contested"
         verdict_child_ids.append(cid)
-        components.append(_text(cid, "⚡ Contested: " + ", ".join(arbitration.contested_topics), "body"))
+        label = "Contested"
+        if locale == "vi": label = "Tranh cãi"
+        elif locale == "ja": label = "論争中"
+        components.append(_text(cid, f"⚡ {label}: " + ", ".join(contested), "body"))
 
     btn_uid = "restart_btn"
     btn_label_uid = "restart_btn_label"
     verdict_child_ids.append(btn_uid)
+    btn_label = "Ask another question"
+    if locale == "vi": btn_label = "Đặt câu hỏi khác"
+    elif locale == "ja": btn_label = "別の質問をする"
     components.append(_button(btn_uid, "restart_debate", btn_label_uid))
-    components.append(_text(btn_label_uid, "Ask another question", "body"))
+    components.append(_text(btn_label_uid, btn_label, "body"))
 
     return _surface_update([
         _column(ROOT_ID, children),
@@ -247,7 +288,7 @@ class A2UIStreamObserver:
     ) -> None:
         _ = (payload, context)
         if event_type == "arbitration_started":
-            msg = arbitrating_msg(self._children)
+            msg = arbitrating_msg(self._children, locale=getattr(self, "_locale", "en"))
             # Update _children to reflect the new arbitrating_card
             new_children = json.loads(msg)["surfaceUpdate"]["components"][0]["component"]["Column"]["children"]["explicitList"]
             self._children.clear()

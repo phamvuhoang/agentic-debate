@@ -17,10 +17,10 @@ from agentic_debate.methods.grouping import GroupByTopicStrategy
 from agentic_debate.methods.synthesis.passthrough import PassthroughSynthesizer
 from agentic_debate.methods.transcript import SimpleTranscriptFormatter
 from agentic_debate.methods.arbitration.llm_single_judge import LlmSingleJudgeArbitrator
-from agentic_debate.spec import ArbitrationPolicy, DebateSpec, RoundPolicy
+from agentic_debate.spec import ArbitrationPolicy, DebateSpec, RoundPolicy, TranscriptPolicy
 from agentic_debate.types import DebateChallenge, DebateSubject
 
-from backend.gemini import GeminiLlmCaller, intent_analysis, generate_team
+from backend.gemini import GeminiLlmCaller, GeminiLocalizer, intent_analysis, generate_team
 from backend.challenge_source import LlmChallengeSource
 from backend.streamer import (
     A2UIStreamObserver,
@@ -45,6 +45,7 @@ app = FastAPI(title="Agentic Debate Demo")
 
 class DebateRequest(BaseModel):
     topic: str
+    output_locale: str = "en"
 
 
 @app.post("/debate")
@@ -69,25 +70,42 @@ async def debate(request: DebateRequest) -> EventSourceResponse:
                     children.clear()
                     children.extend(new_children)
 
-        try:
-            # Init surface
-            enqueue(begin_rendering_msg(SURFACE_ID, ROOT_ID))
-            enqueue(status_card_msg("Analyzing your question…", children))
+        async def loc(text: str) -> str:
+            if not text or request.output_locale == "en":
+                return text
+            try:
+                return await localizer.localize(text, request.output_locale, ctx)
+            except Exception:
+                _logger.warning(f"Failed to localize: {text}")
+                return text
 
+        try:
             llm = GeminiLlmCaller()
             ctx = DebateContext(namespace="demo")
+            localizer = GeminiLocalizer(llm=llm)
+
+            # Init surface
+            enqueue(begin_rendering_msg(SURFACE_ID, ROOT_ID))
+            enqueue(status_card_msg(await loc("Analyzing your question…"), children))
 
             # Intent analysis
             intent = await intent_analysis(request.topic, llm, ctx)
             enqueue(topic_card_msg(
-                intent.reframed_topic, intent.domain, intent.controversy_level, children
+                await loc(intent.reframed_topic), await loc(intent.domain), await loc(intent.controversy_level), children
             ))
 
             # Team generation
-            enqueue(status_card_msg("Assembling debate team…", children))
+            enqueue(status_card_msg(await loc("Assembling debate team…"), children))
             participants = await generate_team(intent, llm, ctx)
             for participant in participants:
-                enqueue(participant_intro_card_msg(participant, children))
+                # Localize participant for intro card
+                p_loc = participant.model_copy()
+                p_loc.label = await loc(p_loc.label)
+                p_loc.role = await loc(p_loc.role)
+                if p_loc.stance:
+                    p_loc.stance = await loc(p_loc.stance)
+                
+                enqueue(participant_intro_card_msg(p_loc, children))
                 await asyncio.sleep(0.1)  # stagger reveal
 
             # Track round for headers
@@ -97,13 +115,22 @@ async def debate(request: DebateRequest) -> EventSourceResponse:
                 nonlocal current_round
                 if challenge.round_index != current_round:
                     current_round = challenge.round_index
-                    enqueue(round_header_msg(current_round, children))
-                enqueue(argument_card_msg(challenge, participants, children))
+                    enqueue(round_header_msg(current_round, children, locale=request.output_locale))
+                
+                # Localize challenge text and topic
+                c_loc = challenge.model_copy()
+                c_loc.challenge_text = await loc(c_loc.challenge_text)
+                c_loc.topic = await loc(c_loc.topic)
+                
+                enqueue(argument_card_msg(c_loc, participants, children, locale=request.output_locale))
 
             # Build and run debate
             observer = A2UIStreamObserver(queue=queue, participants=participants)
+            observer._localizer = localizer # For any events observer might handle
+            observer._locale = request.output_locale
 
             challenge_source = LlmChallengeSource(llm=llm, on_challenge=on_challenge)
+
             compiler = DebateCompiler(
                 challenge_source=challenge_source,
                 grouping=GroupByTopicStrategy(),
@@ -111,6 +138,7 @@ async def debate(request: DebateRequest) -> EventSourceResponse:
                 synthesizer=PassthroughSynthesizer(),
                 transcript_formatter=SimpleTranscriptFormatter(),
                 observers=[observer],
+                output_localizer=localizer,
             )
             spec = DebateSpec(
                 namespace="demo",
@@ -118,6 +146,7 @@ async def debate(request: DebateRequest) -> EventSourceResponse:
                 participants=participants,
                 round_policy=RoundPolicy(mode="precomputed", max_rounds=intent.recommended_rounds),
                 arbitration_policy=ArbitrationPolicy(method="llm_single_judge"),
+                transcript_policy=TranscriptPolicy(output_locale=request.output_locale),
             )
             compiled = await compiler.compile(spec, context=ctx)
 
@@ -126,11 +155,11 @@ async def debate(request: DebateRequest) -> EventSourceResponse:
 
             run_result = await DebateEngine().run(compiled, context=ctx)
 
-            enqueue(verdict_card_msg(run_result.arbitration, participants, children))
+            enqueue(verdict_card_msg(run_result.arbitration, participants, children, transcript=run_result.transcript, locale=request.output_locale))
 
         except Exception as exc:
             _logger.exception("debate_run_failed")
-            queue.put_nowait(error_card_msg(str(exc), children))
+            queue.put_nowait(error_card_msg(await loc(str(exc)), children))
         finally:
             queue.put_nowait(None)  # sentinel
 

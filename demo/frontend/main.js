@@ -94,11 +94,13 @@ surfaceEl.processor = processor;
 surfaceEl.surfaceId = SURFACE_ID;
 
 const topicInput = document.getElementById('topic-input');
+const languageSelect = document.getElementById('language-select');
 const submitBtn = document.getElementById('submit-btn');
 
 function setRunning(running) {
   submitBtn.disabled = running;
   topicInput.disabled = running;
+  languageSelect.disabled = running;
 }
 
 function resetSurface() {
@@ -115,7 +117,7 @@ async function startDebate(topic) {
     response = await fetch('/debate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic }),
+      body: JSON.stringify({ topic, output_locale: languageSelect.value }),
     });
   } catch (err) {
     console.error('fetch failed', err);
