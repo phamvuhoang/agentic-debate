@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from typing import TypeVar
 
@@ -46,7 +47,12 @@ class GeminiLlmCaller:
                 f"Gemini returned no text. "
                 f"finish_reason={getattr(getattr(response, 'candidates', [{}])[0], 'finish_reason', 'unknown')!r}"
             )
-        return response_model.model_validate_json(response.text)
+
+        payload = json.loads(response.text)
+        # Gemini occasionally wraps a single JSON object in a top-level array.
+        if isinstance(payload, list) and len(payload) == 1 and isinstance(payload[0], dict):
+            payload = payload[0]
+        return response_model.model_validate(payload)
 
     async def generate_text(
         self,

@@ -34,6 +34,26 @@ async def test_gemini_llm_caller_returns_parsed_model(mock_genai_client):
 
 
 @pytest.mark.asyncio
+async def test_gemini_llm_caller_unwraps_singleton_object_list():
+    from backend.gemini import GeminiLlmCaller
+
+    client = MagicMock()
+    response = MagicMock()
+    response.text = json.dumps([{"name": "test", "value": 42}])
+    client.aio = MagicMock()
+    client.aio.models = MagicMock()
+    client.aio.models.generate_content = AsyncMock(return_value=response)
+
+    caller = GeminiLlmCaller(client=client)
+    ctx = DebateContext(namespace="test")
+    result = await caller.generate_structured("prompt", _SampleModel, context=ctx)
+
+    assert isinstance(result, _SampleModel)
+    assert result.name == "test"
+    assert result.value == 42
+
+
+@pytest.mark.asyncio
 async def test_gemini_llm_caller_passes_model_name(mock_genai_client):
     from backend.gemini import GeminiLlmCaller
     caller = GeminiLlmCaller(client=mock_genai_client, model="test-model-sentinel")

@@ -7,7 +7,7 @@ import pathlib
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from agentic_debate import LlmChallengeSource
@@ -47,6 +47,18 @@ app = FastAPI(title="Agentic Debate Demo")
 class DebateRequest(BaseModel):
     topic: str
     output_locale: str = "en"
+    participant_count: int | None = Field(
+        default=None,
+        ge=2,
+        le=10,
+        validation_alias=AliasChoices("participant_count", "max_participants"),
+    )
+    round_count: int | None = Field(
+        default=None,
+        ge=1,
+        le=5,
+        validation_alias=AliasChoices("round_count", "max_rounds"),
+    )
 
 
 @app.post("/debate")
@@ -89,7 +101,13 @@ async def debate(request: DebateRequest) -> EventSourceResponse:
             enqueue(begin_rendering_msg(SURFACE_ID, ROOT_ID))
             enqueue(status_card_msg(await loc("Analyzing your question…"), children))
 
-            plan = await build_demo_plan(request.topic, llm, ctx)
+            plan = await build_demo_plan(
+                request.topic,
+                llm,
+                ctx,
+                participant_count=request.participant_count,
+                round_count=request.round_count,
+            )
             intent = plan.intent
             enqueue(topic_card_msg(
                 await loc(intent.reframed_topic), await loc(intent.domain), await loc(intent.controversy_level), children

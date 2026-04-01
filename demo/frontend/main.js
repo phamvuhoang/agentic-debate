@@ -95,17 +95,25 @@ surfaceEl.surfaceId = SURFACE_ID;
 
 const topicInput = document.getElementById('topic-input');
 const languageSelect = document.getElementById('language-select');
+const maxParticipantsSelect = document.getElementById('max-participants-select');
+const maxRoundsSelect = document.getElementById('max-rounds-select');
 const submitBtn = document.getElementById('submit-btn');
 
 function setRunning(running) {
   submitBtn.disabled = running;
   topicInput.disabled = running;
   languageSelect.disabled = running;
+  maxParticipantsSelect.disabled = running;
+  maxRoundsSelect.disabled = running;
 }
 
 function resetSurface() {
   processor.clearSurfaces();
   surfaceEl.surface = null;
+}
+
+function selectedNumberOrNull(select) {
+  return select.value ? Number(select.value) : null;
 }
 
 async function startDebate(topic) {
@@ -117,7 +125,12 @@ async function startDebate(topic) {
     response = await fetch('/debate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic, output_locale: languageSelect.value }),
+      body: JSON.stringify({
+        topic,
+        output_locale: languageSelect.value,
+        participant_count: selectedNumberOrNull(maxParticipantsSelect),
+        round_count: selectedNumberOrNull(maxRoundsSelect),
+      }),
     });
   } catch (err) {
     console.error('fetch failed', err);

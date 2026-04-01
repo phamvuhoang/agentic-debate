@@ -77,5 +77,111 @@ async def test_build_demo_plan_clamps_values_via_library_planner():
     plan = await build_demo_plan("test", caller, ctx)
 
     assert plan.intent.controversy_level == "medium"
-    assert len(plan.participants) == 5
+    assert plan.intent.recommended_participants == 10
+    assert len(plan.participants) == 6
     assert plan.round_policy.max_rounds == 1
+
+
+@pytest.mark.asyncio
+async def test_build_demo_plan_applies_demo_caps():
+    from backend.planning import build_demo_plan
+
+    intent_payload = {
+        "reframed_topic": "Should AI replace doctors?",
+        "domain": "healthcare",
+        "controversy_level": "high",
+        "recommended_participants": 5,
+        "recommended_rounds": 3,
+    }
+    team_payload = {
+        "participants": [
+            {"participant_id": f"p{i}", "label": f"Person {i}", "role": "debater", "stance": "pro"}
+            for i in range(5)
+        ]
+    }
+    caller = _make_caller(intent_payload, team_payload)
+    ctx = DebateContext(namespace="test")
+
+    plan = await build_demo_plan(
+        "should AI replace doctors",
+        caller,
+        ctx,
+        max_participants=3,
+        max_rounds=2,
+    )
+
+    assert len(plan.participants) == 3
+    assert plan.intent.recommended_participants == 3
+    assert plan.intent.recommended_rounds == 2
+    assert plan.round_policy.max_rounds == 2
+    assert plan.participants[0].metadata["accent_color"] == ACCENT_COLORS[0]
+
+
+@pytest.mark.asyncio
+async def test_build_demo_plan_honors_exact_demo_selections():
+    from backend.planning import build_demo_plan
+
+    intent_payload = {
+        "reframed_topic": "Should AI replace doctors?",
+        "domain": "healthcare",
+        "controversy_level": "high",
+        "recommended_participants": 3,
+        "recommended_rounds": 1,
+    }
+    team_payload = {
+        "participants": [
+            {"participant_id": f"p{i}", "label": f"Person {i}", "role": "debater", "stance": "pro"}
+            for i in range(5)
+        ]
+    }
+    caller = _make_caller(intent_payload, team_payload)
+    ctx = DebateContext(namespace="test")
+
+    plan = await build_demo_plan(
+        "should AI replace doctors",
+        caller,
+        ctx,
+        participant_count=5,
+        round_count=3,
+    )
+
+    assert len(plan.participants) == 5
+    assert plan.intent.recommended_participants == 5
+    assert plan.intent.recommended_rounds == 3
+    assert plan.round_policy.max_rounds == 3
+    assert plan.participants[0].metadata["accent_color"] == ACCENT_COLORS[0]
+
+
+@pytest.mark.asyncio
+async def test_build_demo_plan_supports_ten_members_and_five_rounds():
+    from backend.planning import build_demo_plan
+
+    intent_payload = {
+        "reframed_topic": "Should AI replace doctors?",
+        "domain": "healthcare",
+        "controversy_level": "high",
+        "recommended_participants": 3,
+        "recommended_rounds": 1,
+    }
+    team_payload = {
+        "participants": [
+            {"participant_id": f"p{i}", "label": f"Person {i}", "role": "debater", "stance": "pro"}
+            for i in range(10)
+        ]
+    }
+    caller = _make_caller(intent_payload, team_payload)
+    ctx = DebateContext(namespace="test")
+
+    plan = await build_demo_plan(
+        "should AI replace doctors",
+        caller,
+        ctx,
+        participant_count=10,
+        round_count=5,
+    )
+
+    assert len(plan.participants) == 10
+    assert plan.intent.recommended_participants == 10
+    assert plan.intent.recommended_rounds == 5
+    assert plan.round_policy.max_rounds == 5
+    assert plan.participants[0].metadata["accent_color"] == ACCENT_COLORS[0]

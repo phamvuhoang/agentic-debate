@@ -112,6 +112,59 @@ async def test_llm_single_judge_replaces_unknown_winner_with_unresolved():
 
 
 @pytest.mark.asyncio
+async def test_llm_single_judge_tolerates_missing_rationale() -> None:
+    spec = DebateSpec(
+        namespace="test",
+        subject=DebateSubject(kind="test", title="Test"),
+        participants=[
+            DebateParticipant(participant_id="a", label="A", role="lens"),
+            DebateParticipant(participant_id="b", label="B", role="lens"),
+        ],
+    )
+
+    class _MissingRationaleCaller:
+        async def generate_structured(self, prompt, response_model, *, context):
+            return response_model.model_validate(
+                {
+                    "verdicts": [
+                        {
+                            "topic": "t1",
+                            "winning_participant_id": "a",
+                            "confidence": 0.7,
+                            "consensus_level": "moderate",
+                        }
+                    ],
+                    "debate_summary": "s",
+                    "contested_topics": [],
+                }
+            )
+
+    compiler = DebateCompiler(
+        challenge_source=PrecomputedChallengeSource([
+            DebateChallenge(
+                challenger_id="a",
+                target_id="b",
+                topic="t1",
+                challenge_text="c",
+                confidence=0.5,
+            )
+        ]),
+        grouping=GroupByTopicStrategy(),
+        arbitrator=LlmSingleJudgeArbitrator(
+            llm=_MissingRationaleCaller(),
+            prompt_template=SIMPLE_TEMPLATE,
+        ),
+        synthesizer=PassthroughSynthesizer(),
+        transcript_formatter=SimpleTranscriptFormatter(),
+    )
+    result = await DebateEngine().run(
+        await compiler.compile(spec), context=DebateContext(namespace="test")
+    )
+
+    assert result.arbitration.verdicts[0].rationale == "No rationale provided by judge."
+
+
+@pytest.mark.asyncio
 async def test_llm_single_judge_extra_format_vars():
     """extra_format_vars callable is called and its output merged into prompt."""
     received_vars: dict = {}

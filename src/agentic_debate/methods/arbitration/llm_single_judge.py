@@ -4,21 +4,32 @@ from __future__ import annotations
 import json
 from typing import Any, Callable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from agentic_debate.context import DebateContext
 from agentic_debate.llm.base import LlmCaller
 from agentic_debate.spec import DebateSpec
 from agentic_debate.types import DebateArbitration, DebateTopicGroup, DebateVerdict
 
+_MISSING_RATIONALE = "No rationale provided by judge."
+
 
 class _VerdictItem(BaseModel):
     topic: str
     winning_participant_id: str
     confidence: float
-    rationale: str
+    rationale: str = Field(default=_MISSING_RATIONALE)
     open_questions: list[str] = []
     consensus_level: str = "moderate"
+
+    @field_validator("rationale", mode="before")
+    @classmethod
+    def _default_rationale(cls, value: Any) -> str:
+        if value is None:
+            return _MISSING_RATIONALE
+        if isinstance(value, str) and not value.strip():
+            return _MISSING_RATIONALE
+        return str(value)
 
 
 class _JudgeOutput(BaseModel):

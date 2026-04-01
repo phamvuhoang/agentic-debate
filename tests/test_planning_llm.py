@@ -19,6 +19,10 @@ def test_builtin_planning_prompt_set_exposes_required_templates() -> None:
     prompt_set = load_builtin_planning_prompt_set()
 
     assert "{topic}" in prompt_set.intent_prompt_template
+    assert "{participant_min}" in prompt_set.intent_prompt_template
+    assert "{participant_max}" in prompt_set.intent_prompt_template
+    assert "{round_min}" in prompt_set.intent_prompt_template
+    assert "{round_max}" in prompt_set.intent_prompt_template
     assert "{topic}" in prompt_set.team_prompt_template
     assert "{reframed_topic}" in prompt_set.team_prompt_template
     assert "{domain}" in prompt_set.team_prompt_template
@@ -104,6 +108,56 @@ async def test_llm_debate_planner_uses_custom_prompt_set() -> None:
         "intent::custom topic",
         "team::custom topic::Topic::general::low::2::1",
     ]
+
+
+@pytest.mark.asyncio
+async def test_llm_debate_planner_applies_max_caps() -> None:
+    planner = LlmDebatePlanner(llm=_HighRoundPlannerCaller())
+    plan = await planner.plan_topic(
+        "should ai replace doctors",
+        context=DebateContext(namespace="test"),
+        max_participants=3,
+        max_rounds=2,
+    )
+
+    assert len(plan.participants) == 3
+    assert plan.intent.recommended_participants == 3
+    assert plan.intent.recommended_rounds == 2
+    assert plan.round_policy.max_rounds == 2
+
+
+@pytest.mark.asyncio
+async def test_llm_debate_planner_honors_exact_overrides() -> None:
+    planner = LlmDebatePlanner(llm=_LowRoundPlannerCaller())
+    plan = await planner.plan_topic(
+        "should ai replace doctors",
+        context=DebateContext(namespace="test"),
+        participant_count=5,
+        round_count=3,
+    )
+
+    assert len(plan.participants) == 5
+    assert plan.intent.recommended_participants == 5
+    assert plan.intent.recommended_rounds == 3
+    assert plan.round_policy.max_rounds == 3
+
+
+@pytest.mark.asyncio
+async def test_llm_debate_planner_supports_wider_override_bounds() -> None:
+    planner = LlmDebatePlanner(llm=_WidePlannerCaller())
+    plan = await planner.plan_topic(
+        "should ai replace doctors",
+        context=DebateContext(namespace="test"),
+        participant_count=10,
+        round_count=5,
+        participant_upper_bound=10,
+        round_upper_bound=5,
+    )
+
+    assert len(plan.participants) == 10
+    assert plan.intent.recommended_participants == 10
+    assert plan.intent.recommended_rounds == 5
+    assert plan.round_policy.max_rounds == 5
 
 
 @dataclass
@@ -238,6 +292,87 @@ class _CapturingPlannerCaller:
                 "participants": [
                     {"participant_id": "a", "label": "A", "role": "expert", "stance": "stance"},
                     {"participant_id": "b", "label": "B", "role": "expert", "stance": "stance"},
+                ]
+            }
+        )
+
+
+@dataclass
+class _HighRoundPlannerCaller:
+    call_count: int = 0
+
+    async def generate_structured(self, prompt: str, response_model: type, *, context: DebateContext):
+        self.call_count += 1
+        if self.call_count == 1:
+            return response_model.model_validate(
+                {
+                    "reframed_topic": "Should AI replace doctors?",
+                    "domain": "healthcare",
+                    "controversy_level": "high",
+                    "recommended_participants": 5,
+                    "recommended_rounds": 3,
+                }
+            )
+
+        return response_model.model_validate(
+            {
+                "participants": [
+                    {"participant_id": f"p{i}", "label": f"Person {i}", "role": "expert", "stance": "stance"}
+                    for i in range(6)
+                ]
+            }
+        )
+
+
+@dataclass
+class _LowRoundPlannerCaller:
+    call_count: int = 0
+
+    async def generate_structured(self, prompt: str, response_model: type, *, context: DebateContext):
+        self.call_count += 1
+        if self.call_count == 1:
+            return response_model.model_validate(
+                {
+                    "reframed_topic": "Should AI replace doctors?",
+                    "domain": "healthcare",
+                    "controversy_level": "medium",
+                    "recommended_participants": 3,
+                    "recommended_rounds": 1,
+                }
+            )
+
+        return response_model.model_validate(
+            {
+                "participants": [
+                    {"participant_id": f"p{i}", "label": f"Person {i}", "role": "expert", "stance": "stance"}
+                    for i in range(5)
+                ]
+            }
+        )
+
+
+@dataclass
+class _WidePlannerCaller:
+    call_count: int = 0
+
+    async def generate_structured(self, prompt: str, response_model: type, *, context: DebateContext):
+        self.call_count += 1
+        if self.call_count == 1:
+            return response_model.model_validate(
+                {
+                    "reframed_topic": "Should AI replace doctors?",
+                    "domain": "healthcare",
+                    "controversy_level": "medium",
+                    "recommended_participants": 3,
+                    "recommended_rounds": 1,
+                }
+            )
+
+        return response_model.model_validate(
+            {
+                "participants": [
+                    {"participant_id": f"p{i}", "label": f"Person {i}", "role": "expert", "stance": "stance"}
+                    for i in range(10)
                 ]
             }
         )

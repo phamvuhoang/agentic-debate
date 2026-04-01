@@ -31,9 +31,31 @@ class _TeamResponse(BaseModel):
     participants: list[_ParticipantRaw]
 
 
+_MIN_PARTICIPANTS = 2
+_DEFAULT_PARTICIPANT_UPPER_BOUND = 5
+_MIN_ROUNDS = 1
+_DEFAULT_ROUND_UPPER_BOUND = 3
+
+
 def _normalize_controversy(level: str) -> str:
     normalized = level.lower()
     return normalized if normalized in {"low", "medium", "high"} else "medium"
+
+
+def _normalize_recommendation(
+    value: int,
+    *,
+    lower: int,
+    upper: int,
+    cap: int | None,
+    exact: int | None = None,
+) -> int:
+    if exact is not None:
+        return max(lower, min(upper, exact))
+    normalized = max(lower, min(upper, value))
+    if cap is None:
+        return normalized
+    return min(normalized, max(lower, min(upper, cap)))
 
 
 class LlmDebatePlanner:
@@ -48,10 +70,29 @@ class LlmDebatePlanner:
         self._llm = llm
         self._prompt_set = prompt_set or load_builtin_planning_prompt_set()
 
-    async def plan_topic(self, topic: str, *, context: DebateContext) -> DebatePlan:
+    async def plan_topic(
+        self,
+        topic: str,
+        *,
+        context: DebateContext,
+        max_participants: int | None = None,
+        max_rounds: int | None = None,
+        participant_count: int | None = None,
+        round_count: int | None = None,
+        participant_upper_bound: int = _DEFAULT_PARTICIPANT_UPPER_BOUND,
+        round_upper_bound: int = _DEFAULT_ROUND_UPPER_BOUND,
+    ) -> DebatePlan:
+        participant_upper_bound = max(_MIN_PARTICIPANTS, participant_upper_bound)
+        round_upper_bound = max(_MIN_ROUNDS, round_upper_bound)
         try:
             raw_intent = await self._llm.generate_structured(
-                self._prompt_set.intent_prompt_template.format(topic=topic),
+                self._prompt_set.intent_prompt_template.format(
+                    topic=topic,
+                    participant_min=_MIN_PARTICIPANTS,
+                    participant_max=participant_upper_bound,
+                    round_min=_MIN_ROUNDS,
+                    round_max=round_upper_bound,
+                ),
                 _RawIntentResult,
                 context=context,
             )
@@ -62,8 +103,20 @@ class LlmDebatePlanner:
             reframed_topic=raw_intent.reframed_topic,
             domain=raw_intent.domain,
             controversy_level=_normalize_controversy(raw_intent.controversy_level),  # type: ignore[arg-type]
-            recommended_participants=max(2, min(5, raw_intent.recommended_participants)),
-            recommended_rounds=max(1, min(3, raw_intent.recommended_rounds)),
+            recommended_participants=_normalize_recommendation(
+                raw_intent.recommended_participants,
+                lower=_MIN_PARTICIPANTS,
+                upper=participant_upper_bound,
+                cap=max_participants,
+                exact=participant_count,
+            ),
+            recommended_rounds=_normalize_recommendation(
+                raw_intent.recommended_rounds,
+                lower=_MIN_ROUNDS,
+                upper=round_upper_bound,
+                cap=max_rounds,
+                exact=round_count,
+            ),
         )
 
         try:

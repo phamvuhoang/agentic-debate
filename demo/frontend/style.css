@@ -31,27 +31,37 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 }
 #logo { font-size: 1.1rem; font-weight: 700; white-space: nowrap; }
 
-#input-row { display: flex; gap: 8px; flex: 1; }
+#input-row {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr) auto;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+}
 
 #topic-input {
-  flex: 1;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
   font-size: 0.95rem;
+  min-width: 0;
   padding: 10px 14px;
   outline: none;
   transition: border-color 0.2s;
 }
 #topic-input:focus { border-color: var(--accent); }
 
-#language-select {
+#language-select,
+#max-participants-select,
+#max-rounds-select {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
   font-size: 0.9rem;
+  min-width: 0;
   padding: 0 10px;
   outline: none;
   cursor: pointer;
@@ -59,7 +69,11 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   -webkit-appearance: none;
   text-align: center;
 }
-#language-select:focus { border-color: var(--accent); }
+#language-select:focus,
+#max-participants-select:focus,
+#max-rounds-select:focus {
+  border-color: var(--accent);
+}
 
 #submit-btn {
   background: var(--accent);
@@ -116,4 +130,27 @@ a2ui-button {
   background: var(--accent) !important;
   border-radius: var(--radius) !important;
   cursor: pointer !important;
+}
+
+@media (max-width: 720px) {
+  :root {
+    --header-h: 136px;
+  }
+
+  #header-inner {
+    align-items: stretch;
+    flex-direction: column;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px 16px;
+  }
+
+  #input-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  }
+
+  #topic-input {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
 }
