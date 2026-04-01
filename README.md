@@ -2,55 +2,68 @@
 
 **Agentic Debate** is a host-agnostic adversarial debate engine for Python. It orchestrates structured, multi-agent debates where specialized AI personas challenge each other's perspectives, overseen by an impartial arbitrator.
 
-## 💡 Core Feature: "Auto-Team" Brilliance
+## What Ships Today
 
-The `agentic-debate` library's standout capability is **Intent Analysis** and **Auto-Team** generation. Instead of relying on static agents, the library enables a "just-in-time" generation process:
+The installable package now includes both the neutral execution engine and a provider-neutral planning layer:
 
-1.  **Intent Analysis (Brainstorming)**:
-    -   Analyzes the user's input topic to determine the optimal debate structure.
-    -   Reframes the topic and identifies its **Domain** and **Controversy Level**.
-    -   Calculates the recommended **Number of Participants** (2–5) and **Rounds** (1–3).
-
-2.  **Auto-Team Generation (Casting)**:
-    -   Dynamically creates unique, specialized expert personas tailored to the specific topic.
-    -   Assigns each participant a distinct **Role**, **Stance**, and **Visual Identity**.
-    -   Ensures a balanced, adversarial environment with truly diverse viewpoints.
+- **Planning API**: `LlmDebatePlanner` converts a raw topic into a validated `DebatePlan`
+- **Runnable spec generation**: `DebatePlan.to_spec()` converts that plan into a normal `DebateSpec`
+- **Built-in generated rounds**: `LlmChallengeSource` generates first-round arguments and rebuttals from any `LlmCaller`
+- **Neutral execution engine**: `DebateCompiler` + `DebateEngine` orchestrate grouping, arbitration, synthesis, transcript formatting, localization, and observers
+- **Prompt helpers**: packaged prompt templates for planning, challenge generation, and the built-in judge prompt loader
 
 ---
 
 ## 🏗️ Architecture
 
-The system is built on a clean separation between **Planning**, **Debate Logic**, and **LLM Execution**.
+The current architecture is built around a clean separation between **planning**, **execution**, and **host adapters**.
 
 ```mermaid
 graph TD
-    User([User Topic]) --> Intent[Intent Analysis]
-    Intent --> Team[Team Generation]
-    Team --> Spec[Debate Spec]
+    User([User Topic]) --> Planner["LlmDebatePlanner"]
+    Planner --> Plan["DebatePlan"]
+    Plan --> Spec["DebateSpec via to_spec()"]
     
-    subgraph Engine [Debate Engine]
-        Compiler[Debate Compiler]
-        Run[Execution Loop]
-        Arb[Arbitrator]
+    subgraph Package ["agentic-debate package"]
+        Planner
+        Plan
+        Spec
+        ChallengeSource["LlmChallengeSource"]
+        Compiler["DebateCompiler"]
+        Engine["DebateEngine"]
+        Grouping["GroupingStrategy"]
+        Arbitrator["Arbitrator"]
+        Transcript["TranscriptFormatter"]
     end
-    
+
+    subgraph Host ["Your app / demo"]
+        Caller["LlmCaller implementation"]
+        Observer["DebateObserver / UI / persistence"]
+    end
+
+    Caller --> Planner
+    Caller --> ChallengeSource
+    Spec --> ChallengeSource
     Spec --> Compiler
-    Compiler --> Run
-    
-    subgraph Protocols [Pluggable Protocols]
-        LlmCaller[LlmCaller]
-        ChallengeSource[ChallengeSource]
-        Observer[DebateObserver]
-    end
-    
-    Run <--> Protocols
-    Run --> Arb
-    Arb --> Result([Final Verdict])
+    ChallengeSource --> Compiler
+    Compiler --> Engine
+    Grouping --> Compiler
+    Arbitrator --> Compiler
+    Transcript --> Compiler
+    Observer --> Engine
+    Engine --> Result([Final verdict + transcript])
 ```
 
--   **Intent & Team Generation**: The core intelligence that converts a simple topic into a structured debate spec.
--   **`DebateEngine`**: The stateless orchestrator that executes the adversarial loop.
--   **Pluggable Protocols**: Allow you to bring your own LLM, challenge sources, and observers.
+### Package Layers
+
+- **Planning**: `agentic_debate.planning` contains `DebateIntent`, `PlannedParticipant`, `DebatePlan`, `DebatePlanner`, and `LlmDebatePlanner`
+- **Execution**: `DebateCompiler` and `DebateEngine` stay host-agnostic and operate on a normal `DebateSpec`
+- **Generated rounds**: `agentic_debate.methods.rounds.llm.LlmChallengeSource` is the installable generated challenge path
+- **Pluggable boundaries**: `LlmCaller`, observers, grouping, arbitration, synthesis, and transcript formatting remain overridable
+
+### What Stays Provider-Neutral
+
+The package does not depend on Gemini, OpenAI, LangGraph, FastAPI, or any other host framework. The only LLM-facing contract inside the package is `LlmCaller`.
 
 ---
 
@@ -63,7 +76,7 @@ pip install agentic-debate
 ```
 
 ### Run the Demo
-The repository includes a full-stack demo that demonstrates the library's auto-team and streaming features.
+The repository includes a full-stack demo that shows the package-native planning and challenge APIs in a browser with SSE streaming.
 
 ```bash
 cd demo
@@ -74,54 +87,136 @@ cd demo
 
 ## 🛠️ How to Use in Other Codebases
 
-To integrate `agentic-debate` into your own project, follow this pattern:
+To integrate `agentic-debate` into your own project, follow this pattern.
 
-### 1. Perform Intent Analysis
-Use the library's intent analysis pattern to prepare the debate.
+### 1. Implement an `LlmCaller`
+The package is provider-neutral. Bring your own adapter that implements `LlmCaller`.
 
 ```python
-from backend.gemini import GeminiLlmCaller, intent_analysis, generate_team
-from agentic_debate import DebateContext
+from typing import TypeVar
 
-llm = GeminiLlmCaller()
-ctx = DebateContext(namespace="my-app")
+from pydantic import BaseModel
 
-# 1. Analyze topic & Generate team
-intent = await intent_analysis("Is nuclear power safe?", llm, ctx)
-participants = await generate_team(intent, llm, ctx)
+from agentic_debate import DebateContext, LlmCaller
+
+T = TypeVar("T", bound=BaseModel)
+
+
+class MyLlmCaller:
+    async def generate_structured(
+        self,
+        prompt: str,
+        response_model: type[T],
+        *,
+        context: DebateContext,
+    ) -> T:
+        # Call your provider and return response_model.model_validate(...)
+        raise NotImplementedError
 ```
 
-### 2. Compile and Run the Debate
-Wire the generated team into a `DebateSpec` and execute.
+### 2. Plan the Debate from a Raw Topic
+Use the installable planning API to turn a raw topic into a runnable debate plan.
 
 ```python
-from agentic_debate import DebateCompiler, DebateEngine, DebateSpec, DebateSubject
+from agentic_debate import DebateContext, LlmDebatePlanner
 
-# 1. Setup engine
+llm = MyLlmCaller()
+ctx = DebateContext(namespace="my-app")
+
+planner = LlmDebatePlanner(llm=llm)
+plan = await planner.plan_topic("Is nuclear power safe?", context=ctx)
+spec = plan.to_spec(namespace="my-app")
+```
+
+`plan` contains normalized intent data, participants, and a runnable `RoundPolicy`. If you want host-specific presentation hints, add them to participant `metadata` before calling `to_spec()`.
+
+### 3. Compile and Run the Debate
+Wire the planned spec into the engine and execute it.
+
+```python
+from agentic_debate import (
+    DebateCompiler,
+    DebateEngine,
+    GroupByTopicStrategy,
+    LlmChallengeSource,
+    LlmSingleJudgeArbitrator,
+    PassthroughSynthesizer,
+    SimpleTranscriptFormatter,
+)
+from agentic_debate.prompts import load_builtin_judge_prompt
+
 compiler = DebateCompiler(
     challenge_source=LlmChallengeSource(llm=llm),
-    arbitrator=LlmSingleJudgeArbitrator(llm=llm),
-    # ... other components
+    grouping=GroupByTopicStrategy(),
+    arbitrator=LlmSingleJudgeArbitrator(
+        llm=llm,
+        prompt_template=load_builtin_judge_prompt(),
+    ),
+    synthesizer=PassthroughSynthesizer(),
+    transcript_formatter=SimpleTranscriptFormatter(),
 )
 
-# 2. Run with auto-generated participants
-spec = DebateSpec(
-    namespace="my-app",
-    subject=DebateSubject(kind="open_question", title=intent.reframed_topic),
-    participants=participants,
-    round_policy=RoundPolicy(mode="precomputed", max_rounds=intent.recommended_rounds),
+result = await DebateEngine().run(await compiler.compile(spec), context=ctx)
+```
+
+### 4. Customize Only Where You Need To
+
+You can start with the installable defaults and override pieces incrementally:
+
+- use `prompt_set=` on `LlmDebatePlanner` to replace planning prompts
+- use `prompt_set=` on `LlmChallengeSource` to replace round-generation prompts
+- replace `LlmSingleJudgeArbitrator` with your own arbitrator
+- add observers for streaming, metrics, or persistence
+- skip generated rounds entirely and use `PrecomputedChallengeSource` if your host creates challenges elsewhere
+
+### Minimal End-to-End Example
+
+```python
+from agentic_debate import (
+    DebateCompiler,
+    DebateContext,
+    DebateEngine,
+    GroupByTopicStrategy,
+    LlmChallengeSource,
+    LlmDebatePlanner,
+    LlmSingleJudgeArbitrator,
+    PassthroughSynthesizer,
+    SimpleTranscriptFormatter,
+)
+from agentic_debate.prompts import load_builtin_judge_prompt
+
+ctx = DebateContext(namespace="my-app")
+llm = MyLlmCaller()
+
+plan = await LlmDebatePlanner(llm=llm).plan_topic(
+    "Should remote work stay the default?",
+    context=ctx,
+)
+spec = plan.to_spec(namespace="my-app")
+
+compiler = DebateCompiler(
+    challenge_source=LlmChallengeSource(llm=llm),
+    grouping=GroupByTopicStrategy(),
+    arbitrator=LlmSingleJudgeArbitrator(
+        llm=llm,
+        prompt_template=load_builtin_judge_prompt(),
+    ),
+    synthesizer=PassthroughSynthesizer(),
+    transcript_formatter=SimpleTranscriptFormatter(),
 )
 
-compiled = await compiler.compile(spec)
-result = await DebateEngine().run(compiled)
+result = await DebateEngine().run(await compiler.compile(spec), context=ctx)
+print(result.transcript["summary"])
 ```
 
 ---
 
 ## 📂 Project Structure
 
--   `src/agentic_debate`: Core library source code.
--   `demo/`: FastAPI & Lit implementation of the core features.
--   `docs/`: Design specifications and architecture plans.
--   `tests/`: Comprehensive test suite.
-
+- `src/agentic_debate`: package source code
+- `src/agentic_debate/planning`: installable planning API
+- `src/agentic_debate/methods/rounds`: built-in round sources, including `LlmChallengeSource`
+- `src/agentic_debate/prompts`: packaged prompt assets and loaders
+- `demo/`: FastAPI + Lit demo that consumes the package APIs
+- `docs/`: design specifications and implementation plans
+- `tests/`: package-level test suite

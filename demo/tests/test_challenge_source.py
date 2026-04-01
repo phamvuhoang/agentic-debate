@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 import json
-from typing import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock
+
 import pytest
+
 from agentic_debate.context import DebateContext
+from agentic_debate.methods.rounds.llm import LlmChallengeSource
 from agentic_debate.spec import DebateSpec, RoundPolicy
 from agentic_debate.types import DebateChallenge, DebateParticipant, DebateSubject
 
@@ -21,19 +24,22 @@ def _make_spec(n_participants: int = 3, max_rounds: int = 2) -> DebateSpec:
             )
             for i in range(n_participants)
         ],
-        round_policy=RoundPolicy(mode="precomputed", max_rounds=max_rounds),
+        round_policy=RoundPolicy(mode="round_robin", max_rounds=max_rounds),
     )
 
 
 def _make_caller(challenge_text: str = "My argument."):
     from backend.gemini import GeminiLlmCaller
+
     client = MagicMock()
     response = MagicMock()
-    response.text = json.dumps({
-        "challenge_text": challenge_text,
-        "topic_tag": "test_topic",
-        "confidence": 0.75,
-    })
+    response.text = json.dumps(
+        {
+            "challenge_text": challenge_text,
+            "topic_tag": "test_topic",
+            "confidence": 0.75,
+        }
+    )
     client.aio = MagicMock()
     client.aio.models = MagicMock()
     client.aio.models.generate_content = AsyncMock(return_value=response)
@@ -42,33 +48,29 @@ def _make_caller(challenge_text: str = "My argument."):
 
 @pytest.mark.asyncio
 async def test_collect_generates_n_participants_times_rounds():
-    from backend.challenge_source import LlmChallengeSource
     spec = _make_spec(n_participants=3, max_rounds=2)
     source = LlmChallengeSource(llm=_make_caller())
     ctx = DebateContext(namespace="test")
     challenges = await source.collect(spec, ctx)
-    assert len(challenges) == 6  # 3 participants × 2 rounds
+    assert len(challenges) == 6
 
 
 @pytest.mark.asyncio
 async def test_collect_sets_round_index():
-    from backend.challenge_source import LlmChallengeSource
     spec = _make_spec(n_participants=2, max_rounds=2)
     source = LlmChallengeSource(llm=_make_caller())
     ctx = DebateContext(namespace="test")
     challenges = await source.collect(spec, ctx)
-    round_indices = {c.round_index for c in challenges}
+    round_indices = {challenge.round_index for challenge in challenges}
     assert round_indices == {1, 2}
 
 
 @pytest.mark.asyncio
 async def test_collect_uses_round_robin_targets():
-    from backend.challenge_source import LlmChallengeSource
     spec = _make_spec(n_participants=3, max_rounds=1)
     source = LlmChallengeSource(llm=_make_caller())
     ctx = DebateContext(namespace="test")
     challenges = await source.collect(spec, ctx)
-    # p0 challenges p1, p1 challenges p2, p2 challenges p0
     assert challenges[0].challenger_id == "p0"
     assert challenges[0].target_id == "p1"
     assert challenges[1].challenger_id == "p1"
@@ -79,22 +81,20 @@ async def test_collect_uses_round_robin_targets():
 
 @pytest.mark.asyncio
 async def test_collect_fires_on_challenge_callback():
-    from backend.challenge_source import LlmChallengeSource
     fired: list[DebateChallenge] = []
 
-    async def on_challenge(c: DebateChallenge) -> None:
-        fired.append(c)
+    async def on_challenge(challenge: DebateChallenge) -> None:
+        fired.append(challenge)
 
     spec = _make_spec(n_participants=2, max_rounds=2)
     source = LlmChallengeSource(llm=_make_caller(), on_challenge=on_challenge)
     ctx = DebateContext(namespace="test")
     await source.collect(spec, ctx)
-    assert len(fired) == 4  # 2 × 2
+    assert len(fired) == 4
 
 
 @pytest.mark.asyncio
 async def test_collect_populates_challenge_fields():
-    from backend.challenge_source import LlmChallengeSource
     spec = _make_spec(n_participants=2, max_rounds=1)
     source = LlmChallengeSource(llm=_make_caller("My argument."))
     ctx = DebateContext(namespace="test")

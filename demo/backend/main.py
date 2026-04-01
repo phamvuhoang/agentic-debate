@@ -10,18 +10,20 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
+from agentic_debate import LlmChallengeSource
 from agentic_debate.compile import DebateCompiler
 from agentic_debate.context import DebateContext
 from agentic_debate.engine import DebateEngine
+from agentic_debate.prompts import load_builtin_judge_prompt
 from agentic_debate.methods.grouping import GroupByTopicStrategy
 from agentic_debate.methods.synthesis.passthrough import PassthroughSynthesizer
 from agentic_debate.methods.transcript import SimpleTranscriptFormatter
 from agentic_debate.methods.arbitration.llm_single_judge import LlmSingleJudgeArbitrator
-from agentic_debate.spec import ArbitrationPolicy, DebateSpec, RoundPolicy, TranscriptPolicy
-from agentic_debate.types import DebateChallenge, DebateSubject
+from agentic_debate.spec import ArbitrationPolicy, TranscriptPolicy
+from agentic_debate.types import DebateChallenge
 
-from backend.gemini import GeminiLlmCaller, GeminiLocalizer, intent_analysis, generate_team
-from backend.challenge_source import LlmChallengeSource
+from backend.gemini import GeminiLlmCaller, GeminiLocalizer
+from backend.planning import build_demo_plan
 from backend.streamer import (
     A2UIStreamObserver,
     SURFACE_ID,
@@ -35,7 +37,6 @@ from backend.streamer import (
     verdict_card_msg,
     error_card_msg,
 )
-from backend.prompts import JUDGE_PROMPT
 
 _logger = logging.getLogger(__name__)
 _FRONTEND = pathlib.Path(__file__).parent.parent / "frontend" / "dist"
@@ -88,18 +89,23 @@ async def debate(request: DebateRequest) -> EventSourceResponse:
             enqueue(begin_rendering_msg(SURFACE_ID, ROOT_ID))
             enqueue(status_card_msg(await loc("Analyzing your question…"), children))
 
-            # Intent analysis
-            intent = await intent_analysis(request.topic, llm, ctx)
+            plan = await build_demo_plan(request.topic, llm, ctx)
+            intent = plan.intent
             enqueue(topic_card_msg(
                 await loc(intent.reframed_topic), await loc(intent.domain), await loc(intent.controversy_level), children
             ))
 
-            # Team generation
             enqueue(status_card_msg(await loc("Assembling debate team…"), children))
-            participants = await generate_team(intent, llm, ctx)
+            spec = plan.to_spec(namespace="demo").model_copy(
+                update={
+                    "arbitration_policy": ArbitrationPolicy(method="llm_single_judge"),
+                    "transcript_policy": TranscriptPolicy(output_locale=request.output_locale),
+                }
+            )
+            participants = spec.participants
             for participant in participants:
                 # Localize participant for intro card
-                p_loc = participant.model_copy()
+                p_loc = participant.model_copy(deep=True)
                 p_loc.label = await loc(p_loc.label)
                 p_loc.role = await loc(p_loc.role)
                 if p_loc.stance:
@@ -118,7 +124,7 @@ async def debate(request: DebateRequest) -> EventSourceResponse:
                     enqueue(round_header_msg(current_round, children, locale=request.output_locale))
                 
                 # Localize challenge text and topic
-                c_loc = challenge.model_copy()
+                c_loc = challenge.model_copy(deep=True)
                 c_loc.challenge_text = await loc(c_loc.challenge_text)
                 c_loc.topic = await loc(c_loc.topic)
                 
@@ -134,19 +140,14 @@ async def debate(request: DebateRequest) -> EventSourceResponse:
             compiler = DebateCompiler(
                 challenge_source=challenge_source,
                 grouping=GroupByTopicStrategy(),
-                arbitrator=LlmSingleJudgeArbitrator(llm=llm, prompt_template=JUDGE_PROMPT),
+                arbitrator=LlmSingleJudgeArbitrator(
+                    llm=llm,
+                    prompt_template=load_builtin_judge_prompt(),
+                ),
                 synthesizer=PassthroughSynthesizer(),
                 transcript_formatter=SimpleTranscriptFormatter(),
                 observers=[observer],
                 output_localizer=localizer,
-            )
-            spec = DebateSpec(
-                namespace="demo",
-                subject=DebateSubject(kind="open_question", title=intent.reframed_topic),
-                participants=participants,
-                round_policy=RoundPolicy(mode="precomputed", max_rounds=intent.recommended_rounds),
-                arbitration_policy=ArbitrationPolicy(method="llm_single_judge"),
-                transcript_policy=TranscriptPolicy(output_locale=request.output_locale),
             )
             compiled = await compiler.compile(spec, context=ctx)
 
