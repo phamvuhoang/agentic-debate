@@ -217,6 +217,6 @@ print(result.transcript["summary"])
 - `src/agentic_debate/planning`: installable planning API
 - `src/agentic_debate/methods/rounds`: built-in round sources, including `LlmChallengeSource`
 - `src/agentic_debate/prompts`: packaged prompt assets and loaders
-- `demo/`: FastAPI + Lit demo that consumes the package APIs
+- `demo/`: FastAPI + TypeScript + Three.js chamber demo that consumes the package APIs
 - `docs/`: design specifications and implementation plans
 - `tests/`: package-level test suite

@@ -1,19 +1,20 @@
 # Agentic Debate Demo — Setup & Run
 
-This directory contains a self-contained web demo of the `agentic-debate` package. The demo is intentionally thin: it uses the installable planning and challenge-generation APIs from `src/agentic_debate` and adds only the Gemini adapter, localization, SSE streaming, and browser UI.
+This directory contains a self-contained web demo of the `agentic-debate` package. The demo is intentionally thin: it uses the installable planning and challenge-generation APIs from `src/agentic_debate` and adds only the Gemini adapter, a session-oriented debate director, typed SSE events, and a Three.js chamber UI.
 
 ## Architecture
 
 The demo is split into three layers:
 
 - **Package layer**: `LlmDebatePlanner`, `LlmChallengeSource`, `DebateCompiler`, and `DebateEngine`
-- **Demo backend adapters**: Gemini `LlmCaller`, demo planning decoration (`accent_color` metadata), SSE message streaming, and FastAPI endpoint wiring
-- **Demo frontend**: Lit + A2UI surface that renders the streamed debate progressively
+- **Demo backend adapters**: Gemini adapter, session-oriented debate director, typed SSE events, replay endpoints
+- **Demo frontend**: TypeScript + Three.js chamber scene with DOM overlays and fallback shell
 
 ```mermaid
 graph TD
-    Topic([User topic]) --> API["POST /debate"]
-    API --> Gemini["GeminiLlmCaller"]
+    Topic([User topic]) --> API["POST /api/sessions"]
+    API --> Director["DebateDirector"]
+    Director --> Gemini["GeminiLlmCaller"]
     Gemini --> Planner["LlmDebatePlanner (package)"]
     Planner --> Decorator["build_demo_plan()"]
     Decorator --> Spec["DebateSpec"]
@@ -21,22 +22,37 @@ graph TD
     Spec --> Compiler["DebateCompiler"]
     ChallengeSource --> Compiler
     Compiler --> Engine["DebateEngine"]
-    Engine --> Streamer["A2UIStreamObserver + SSE queue"]
-    Streamer --> Browser["Lit frontend"]
+    Engine --> Observer["DebateStageObserver"]
+    Observer --> Store["SessionStore (SSE fanout)"]
+    Store --> Browser["Three.js chamber frontend"]
 ```
 
 ### Backend Responsibilities
 
 - `backend/gemini.py`: provider adapter and translation/localization helper
-- `backend/planning.py`: calls package `LlmDebatePlanner` and adds demo-only accent color metadata
-- `backend/main.py`: FastAPI endpoint, SSE queue, package compiler/engine wiring
-- `backend/streamer.py`: converts observer events and generated challenges into A2UI messages
+- `backend/planning.py`: calls package `LlmDebatePlanner` and adds seat index, accent color, and emblem metadata
+- `backend/protocol.py`: Pydantic models for typed debate events and session actions
+- `backend/session_store.py`: in-memory session registry with SSE queue fanout and replay buffers
+- `backend/observer.py`: maps engine lifecycle events to typed stage events
+- `backend/director.py`: session orchestration over planner/compiler/engine + event publication
+- `backend/main.py`: FastAPI app factory with session routes and static serving
+
+### API Routes
+
+- `POST /api/sessions` — create a new debate session, returns session URLs
+- `GET /api/sessions/{session_id}/events` — SSE stream of typed `DebateEvent` objects
+- `POST /api/sessions/{session_id}/actions` — send a director action (pause, verdict, etc.)
+- `GET /api/sessions/{session_id}/replay` — fetch full event replay for a session
 
 ### Frontend Responsibilities
 
-- `frontend/main.js`: submits the topic, reads SSE events, and forwards them to the A2UI surface
-- `frontend/style.css`: demo presentation
-- `frontend/index.html`: input shell and surface mount
+- `src/main.ts`: app entrypoint
+- `src/app/bootstrap.ts`: assemble transport, store, scene, overlay, fallback
+- `src/app/session-controller.ts`: start sessions, subscribe to events, send actions, hydrate replay
+- `src/state/event-reducer.ts`: canonical event reducer
+- `src/scene/`: Three.js chamber scene runtime (renderer, camera, seats, table, atmosphere)
+- `src/overlay/`: DOM overlay surfaces (prompt bar, speaker banner, captions, director dock)
+- `src/fallback/`: 2D presentation when WebGL is unavailable
 
 ## Using `agentic-debate` in Another Codebase
 
@@ -109,7 +125,7 @@ pip install -e ..
 
 ### 2. Build the Frontend
 
-Vite is used to build the Lit-based frontend assets. These are served as static files by FastAPI.
+Vite is used to build the TypeScript + Three.js frontend assets. These are served as static files by FastAPI.
 
 ```bash
 cd frontend
@@ -142,7 +158,7 @@ For a better development experience with hot-reloading for both backend and fron
 
 1. **Start Backend**: in one terminal, run `uvicorn backend.main:app --reload` in the `demo` directory
 2. **Start Frontend**: in another terminal, run `npm run dev` in the `demo/frontend` directory
-3. **Access**: open [http://localhost:5173](http://localhost:5173); the frontend proxies `/debate` to the backend on port 8000
+3. **Access**: open [http://localhost:5173](http://localhost:5173); the frontend proxies `/api` to the backend on port 8000
 
 > [!NOTE]
 > If you get an `Address already in use` error for port 8000, find and kill the process using:
@@ -161,6 +177,10 @@ python -m pytest tests/
 
 - **Package-native planning**: topic -> `DebatePlan` -> `DebateSpec`
 - **Package-native challenge generation**: generated opening arguments and rebuttals
-- **Demo-only presentation decoration**: participant accent colors via metadata
-- **Real-time SSE streaming**: debate output appears progressively in the browser
+- **Typed session events**: all debate lifecycle events modelled as `DebateEvent` with phase tracking
+- **Session-oriented API**: create/replay/stream sessions; send director control actions
+- **Three.js chamber scene**: cinematic round-table with seat states, camera presets, and motion rules
+- **DOM overlays**: prompt bar, speaker banner, caption panel, timeline rail, director dock
+- **Reduced-motion support**: orchestrator respects `prefers-reduced-motion` and `userReading` state
+- **2D fallback shell**: graceful degradation when WebGL is unavailable
 - **LLM-backed arbitration**: final verdict generated from the package judge flow

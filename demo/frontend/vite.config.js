@@ -1,10 +1,9 @@
-// demo/frontend/vite.config.js
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vite';
 
 export default defineConfig({
   server: {
     proxy: {
-      '/debate': {
+      '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
@@ -16,5 +15,8 @@ export default defineConfig({
       input: 'index.html',
     },
   },
-})
-
+  test: {
+    environment: 'jsdom',
+    globals: true,
+  },
+});

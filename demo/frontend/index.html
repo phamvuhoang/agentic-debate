@@ -4,56 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Agentic Debate</title>
-  <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <div id="app">
-    <header id="header">
-      <div id="header-inner">
-        <span id="logo">⚔️ Agentic Debate</span>
-        <div id="input-row">
-          <select id="language-select" aria-label="Output language">
-            <option value="en" selected>English</option>
-            <option value="vi">Vietnamese</option>
-            <option value="ja">Japanese</option>
-            <option value="fr">French</option>
-            <option value="de">German</option>
-            <option value="es">Spanish</option>
-          </select>
-          <select id="max-participants-select" aria-label="Team members">
-            <option value="" selected>Auto team</option>
-            <option value="2">2 members</option>
-            <option value="3">3 members</option>
-            <option value="4">4 members</option>
-            <option value="5">5 members</option>
-            <option value="6">6 members</option>
-            <option value="7">7 members</option>
-            <option value="8">8 members</option>
-            <option value="9">9 members</option>
-            <option value="10">10 members</option>
-          </select>
-          <select id="max-rounds-select" aria-label="Rounds">
-            <option value="" selected>Auto rounds</option>
-            <option value="1">1 round</option>
-            <option value="2">2 rounds</option>
-            <option value="3">3 rounds</option>
-            <option value="4">4 rounds</option>
-            <option value="5">5 rounds</option>
-          </select>
-          <input
-            id="topic-input"
-            type="text"
-            placeholder="Ask anything — the debate team will be auto-assembled…"
-            autocomplete="off"
-          />
-          <button id="submit-btn">Debate</button>
-        </div>
-      </div>
-    </header>
-    <main id="surface-container">
-      <a2ui-surface id="debate-surface"></a2ui-surface>
-    </main>
-  </div>
-  <script type="module" src="/main.js"></script>
+  <div id="app"></div>
+  <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

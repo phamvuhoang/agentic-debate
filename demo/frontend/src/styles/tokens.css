@@ -1,0 +1,11 @@
+:root {
+  --bg: #0b0908;
+  --surface: rgba(22, 18, 16, 0.86);
+  --border: rgba(206, 177, 116, 0.28);
+  --text: #f3ead8;
+  --accent: #d5a44a;
+  --danger: #d35f5f;
+  --radius: 6px;
+  --gap: 10px;
+  --font: system-ui, sans-serif;
+}

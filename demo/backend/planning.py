@@ -38,5 +38,7 @@ async def build_demo_plan(
             "accent_color",
             ACCENT_COLORS[index % len(ACCENT_COLORS)],
         )
+        participant.metadata.setdefault("seat_index", index)
+        participant.metadata.setdefault("emblem", f"sigil-{index + 1}")
 
     return decorated
